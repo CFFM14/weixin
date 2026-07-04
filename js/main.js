@@ -2360,12 +2360,13 @@ class WaterSortGame {
       this._challengeCache[key]=copy.map(function(t){var c=t.slice();c.cap=4;return c;});
       return copy;
     }
-    // Fallback: randomly distribute all layers across tubes
+    // Fallback: randomly distribute all colored layers into correct number of tubes
     var allLayers=[];
     for(var ci=0;ci<spec.counts.length;ci++)for(var ri=0;ri<4*spec.counts[ci];ri++)allLayers.push(colors[ci]);
     for(var si=allLayers.length-1;si>0;si--){var sj=Math.floor(Math.random()*(si+1));var tmp=allLayers[si];allLayers[si]=allLayers[sj];allLayers[sj]=tmp;}
-    var fb=[],idx=0;
-    for(var ci2=0;ci2<spec.counts.length;ci2++){var tube=[];for(var li=0;li<4;li++)tube.push(allLayers[idx++]);tube.cap=4;fb.push(tube);}
+    var fb=[],idx=0, totalTubes=0;
+    for(var ci2=0;ci2<spec.counts.length;ci2++) totalTubes += spec.counts[ci2];
+    for(var ti=0;ti<totalTubes;ti++){var tube=[];for(var li=0;li<4;li++)tube.push(allLayers[idx++]);tube.cap=4;fb.push(tube);}
     for(var ei3=0;ei3<spec.empty;ei3++){var et=[];for(var ej3=0;ej3<4;ej3++)et.push('transparent');et.cap=4;fb.push(et);}
     return fb;
   }
