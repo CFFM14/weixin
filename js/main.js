@@ -184,7 +184,7 @@ class WaterSortGame {
     try {
       var saved = wx.getStorageSync('challenge_unlocked');
       if (saved && typeof saved === 'number') this._unlockedLevel = Math.max(0, Math.min(239, saved));
-    } catch(e) { this._unlockedLevel = 0; }
+    } catch(e) { this._unlockedLevel = 239; }
 
     this.init();
   }
