@@ -2816,11 +2816,22 @@ class WaterSortGame {
   }
 
   // --- Blind Box v2 (HTML5匹配) ---
+  _genAndShuffle(colors, cap, emptyTubes, steps) {
+    // Randomly distribute all colored layers (guarantees proper mixing)
+    var all = [];
+    for (var ci = 0; ci < colors.length; ci++) for (var ri = 0; ri < cap; ri++) all.push(colors[ci]);
+    for (var si = all.length - 1; si > 0; si--) { var sj = Math.floor(Math.random() * (si + 1)); var tmp = all[si]; all[si] = all[sj]; all[sj] = tmp; }
+    var tubes = [], idx = 0;
+    for (var ci2 = 0; ci2 < colors.length; ci2++) { var tube = []; for (var li = 0; li < cap; li++) tube.push(all[idx++]); tube.cap = cap; tubes.push(tube); }
+    for (var ei = 0; ei < emptyTubes; ei++) { var et = []; for (var ej = 0; ej < cap; ej++) et.push('transparent'); et.cap = cap; tubes.push(et); }
+    for (var ei2 = tubes.length - emptyTubes; ei2 < tubes.length; ei2++) for (var ej2 = 0; ej2 < cap; ej2++) tubes[ei2][ej2] = 'transparent';
+    return tubes;
+  }
+
   openBlindBox2(n, maxHidden, tubeRatio) {
-    // Use reverse construction then mark random tubes as hidden
+    // Random distribution (same as challenge levels)
     var colorSet = this.colors.slice(0, n);
-    var shuffleSteps = 50 + n * 10;
-    this.water = this.generateByReverse(colorSet, 4, 2, shuffleSteps);
+    this.water = this._genAndShuffle(colorSet, 4, 2, 50 + n * 10);
 
     // Mark bottom layers as blind
     var numToHide = Math.max(1, Math.floor(this.water.length * tubeRatio));
