@@ -2073,8 +2073,9 @@ class WaterSortGame {
   }
 
   // --- DFS Solver for solvability check ---
-  isSolvable(tubesArray) {
+  isSolvable(tubesArray, fast) {
     var self = this;
+    var maxDepth = fast ? 200 : 8000;
     // Normalize: each tube is array of colors (bottom=idx0), with .cap property
     var normalizeState = function(tubes) {
       return tubes.map(function(t) {
@@ -2124,7 +2125,6 @@ class WaterSortGame {
     var visited = {};
     visited[startHash] = true;
     var queue = [norm];
-    var maxDepth = 8000;
     var explored = 0;
 
     while (queue.length > 0 && explored < maxDepth) {
@@ -2343,7 +2343,7 @@ class WaterSortGame {
     for(var ci=0;ci<spec.counts.length;ci++) for(var ti=0;ti<spec.counts[ci];ti++){var tube=[];for(var li=0;li<4;li++)tube.push(colors[ci]);tube.cap=4;tubes.push(tube);}
     for(var ei=0;ei<spec.empty;ei++){var et=[];for(var ej=0;ej<4;ej++)et.push('transparent');et.cap=4;tubes.push(et);}
     // Randomly distribute all colored layers (guarantees proper mixing)
-    for(var retry=0;retry<20;retry++){
+    for(var retry=0;retry<5;retry++){
       var allLayers=[];
       for(var ci=0;ci<spec.counts.length;ci++)for(var ri=0;ri<4*spec.counts[ci];ri++)allLayers.push(colors[ci]);
       for(var si=allLayers.length-1;si>0;si--){var sj=Math.floor(Math.random()*(si+1));var tmp=allLayers[si];allLayers[si]=allLayers[sj];allLayers[sj]=tmp;}
@@ -2352,7 +2352,7 @@ class WaterSortGame {
       for(var ti=0;ti<totalTubes;ti++){var tube=[];for(var li=0;li<4;li++)tube.push(allLayers[idx++]);tube.cap=4;fb.push(tube);}
       for(var ei3=0;ei3<spec.empty;ei3++){var et=[];for(var ej3=0;ej3<4;ej3++)et.push('transparent');et.cap=4;fb.push(et);}
       // Verify solvable before caching
-      if(this.isSolvable(fb)===true){
+      if(this.isSolvable(fb,true)===true){
         this._challengeCache[key]=fb.map(function(t){var c=t.slice();c.cap=4;return c;});
         return fb;
       }
