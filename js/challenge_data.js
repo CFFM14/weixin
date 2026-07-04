@@ -2,7 +2,7 @@
 // Format: each string is comma-separated 4-char hex tubes
 // hex digit 0-f = color index, f = transparent
 // Always 2 empty tubes at the end
-var CHALLENGE_DATA = [
+GameGlobal.CHALLENGE_DATA = [
   "2434,0203,3321,1101,4402,ffff,ffff",
   "4101,0423,3023,1244,1023,ffff,ffff",
   "0023,1320,3203,4114,2441,ffff,ffff",

@@ -2334,8 +2334,9 @@ class WaterSortGame {
   }
 
   getChallengeLevel(levelIndex) {
-    if (levelIndex < 0 || levelIndex >= CHALLENGE_DATA.length) return [];
-    var hexStr = CHALLENGE_DATA[levelIndex];
+    var data = GameGlobal.CHALLENGE_DATA;
+    if (levelIndex < 0 || levelIndex >= data.length) return [];
+    var hexStr = data[levelIndex];
     var tubeHexes = hexStr.split(',');
     var water = [];
     for (var t = 0; t < tubeHexes.length; t++) {
