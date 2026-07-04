@@ -2187,6 +2187,25 @@ class WaterSortGame {
   startHint(callback) { var self = this; setTimeout(function() { callback(self._findHintSync()); }, 30); }
 
   _findHintSync() {
+    // First, try pre-computed solution for challenge levels
+    if (this.currentLevel >= 0 && this.currentLevel < 240 && GameGlobal.CHALLENGE_SOLUTIONS) {
+      var solStr = GameGlobal.CHALLENGE_SOLUTIONS[this.currentLevel];
+      if (solStr) {
+        var parts = solStr.split(',');
+        for (var pi = 0; pi < parts.length; pi += 2) {
+          var pf = parseInt(parts[pi]), pt = parseInt(parts[pi+1]);
+          if (pf === this._lastHintTo && pt === this._lastHintFrom) continue; // skip reverse
+          // Check if this move is valid for current state
+          var topCheck = this.getTopLayer(this.water[pf]);
+          if (!topCheck) continue;
+          var tgtCheck = this.getTopLayer(this.water[pt]);
+          if (tgtCheck && tgtCheck.color !== topCheck.color) continue;
+          if (!this.hasSpace(this.water[pt])) continue;
+          return { from: pf, to: pt };
+        }
+      }
+    }
+    // Fallback to online DFS solver
     var timeoutMs = 4000, startTime = Date.now(), maxDepth = Math.max(800, this.water.length * 80);
     var banFrom = this._lastHintTo, banTo = this._lastHintFrom;
 
