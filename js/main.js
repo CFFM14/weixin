@@ -2349,25 +2349,23 @@ class WaterSortGame {
     var tubes=[];
     for(var ci=0;ci<spec.counts.length;ci++) for(var ti=0;ti<spec.counts[ci];ti++){var tube=[];for(var li=0;li<4;li++)tube.push(colors[ci]);tube.cap=4;tubes.push(tube);}
     for(var ei=0;ei<spec.empty;ei++){var et=[];for(var ej=0;ej<4;ej++)et.push('transparent');et.cap=4;tubes.push(et);}
-    for(var retry=0;retry<30;retry++){
-      var ss=100+levelIndex*5+retry*50;
-      var copy=tubes.map(function(t){var c=t.slice();c.cap=4;return c;});
-      this._shuffleTubesOnce(copy,ss);
-      var ap=true;for(var ti2=0;ti2<copy.length&&ap;ti2++)for(var lj=1;lj<copy[ti2].cap;lj++)if(copy[ti2][lj]!==copy[ti2][0]){ap=false;break;}
-      if(ap)continue;
-      if(this.isSolvable(copy)!==true)continue;
-      for(var ei2=copy.length-spec.empty;ei2<copy.length;ei2++)for(var ej2=0;ej2<4;ej2++)copy[ei2][ej2]='transparent';
-      this._challengeCache[key]=copy.map(function(t){var c=t.slice();c.cap=4;return c;});
-      return copy;
+    // Randomly distribute all colored layers (guarantees proper mixing)
+    for(var retry=0;retry<20;retry++){
+      var allLayers=[];
+      for(var ci=0;ci<spec.counts.length;ci++)for(var ri=0;ri<4*spec.counts[ci];ri++)allLayers.push(colors[ci]);
+      for(var si=allLayers.length-1;si>0;si--){var sj=Math.floor(Math.random()*(si+1));var tmp=allLayers[si];allLayers[si]=allLayers[sj];allLayers[sj]=tmp;}
+      var fb=[],idx=0, totalTubes=0;
+      for(var ci2=0;ci2<spec.counts.length;ci2++) totalTubes += spec.counts[ci2];
+      for(var ti=0;ti<totalTubes;ti++){var tube=[];for(var li=0;li<4;li++)tube.push(allLayers[idx++]);tube.cap=4;fb.push(tube);}
+      for(var ei3=0;ei3<spec.empty;ei3++){var et=[];for(var ej3=0;ej3<4;ej3++)et.push('transparent');et.cap=4;fb.push(et);}
+      // Verify solvable before caching
+      if(this.isSolvable(fb)===true){
+        this._challengeCache[key]=fb.map(function(t){var c=t.slice();c.cap=4;return c;});
+        return fb;
+      }
     }
-    // Fallback: randomly distribute all colored layers into correct number of tubes
-    var allLayers=[];
-    for(var ci=0;ci<spec.counts.length;ci++)for(var ri=0;ri<4*spec.counts[ci];ri++)allLayers.push(colors[ci]);
-    for(var si=allLayers.length-1;si>0;si--){var sj=Math.floor(Math.random()*(si+1));var tmp=allLayers[si];allLayers[si]=allLayers[sj];allLayers[sj]=tmp;}
-    var fb=[],idx=0, totalTubes=0;
-    for(var ci2=0;ci2<spec.counts.length;ci2++) totalTubes += spec.counts[ci2];
-    for(var ti=0;ti<totalTubes;ti++){var tube=[];for(var li=0;li<4;li++)tube.push(allLayers[idx++]);tube.cap=4;fb.push(tube);}
-    for(var ei3=0;ei3<spec.empty;ei3++){var et=[];for(var ej3=0;ej3<4;ej3++)et.push('transparent');et.cap=4;fb.push(et);}
+    // Last resort
+    this._challengeCache[key]=fb.map(function(t){var c=t.slice();c.cap=4;return c;});
     return fb;
   }
 
