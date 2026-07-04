@@ -2334,7 +2334,8 @@ class WaterSortGame {
       var dc=gt(dst);if(dc&&dc.color!==sc.color)continue;
       var run=1;for(var ri=sc.idx-1;ri>=0&&src[ri]===sc.color;ri--)run++;
       var sp=0;for(var si=0;si<dst.length;si++)if(dst[si]==='transparent')sp++;
-      var cnt=Math.min(run,sp);if(cnt<=0)continue;
+      var mx=Math.min(run,sp);if(mx<=0)continue;
+      var cnt=1+Math.floor(Math.random()*mx);
       var rm=0;for(var ri2=src.length-1;ri2>=0&&rm<cnt;ri2--)if(src[ri2]===sc.color){src[ri2]='transparent';rm++;}
       var ad=0;for(var ai=0;ai<dst.length&&ad<cnt;ai++)if(dst[ai]==='transparent'){dst[ai]=sc.color;ad++;}
     }
@@ -2349,7 +2350,7 @@ class WaterSortGame {
     for(var ci=0;ci<spec.counts.length;ci++) for(var ti=0;ti<spec.counts[ci];ti++){var tube=[];for(var li=0;li<4;li++)tube.push(colors[ci]);tube.cap=4;tubes.push(tube);}
     for(var ei=0;ei<spec.empty;ei++){var et=[];for(var ej=0;ej<4;ej++)et.push('transparent');et.cap=4;tubes.push(et);}
     for(var retry=0;retry<30;retry++){
-      var ss=40+levelIndex*3+retry*25;
+      var ss=100+levelIndex*5+retry*50;
       var copy=tubes.map(function(t){var c=t.slice();c.cap=4;return c;});
       this._shuffleTubesOnce(copy,ss);
       var ap=true;for(var ti2=0;ti2<copy.length&&ap;ti2++)for(var lj=1;lj<copy[ti2].cap;lj++)if(copy[ti2][lj]!==copy[ti2][0]){ap=false;break;}
@@ -2359,8 +2360,13 @@ class WaterSortGame {
       this._challengeCache[key]=copy.map(function(t){var c=t.slice();c.cap=4;return c;});
       return copy;
     }
-    var fb=tubes.map(function(t){var c=t.slice();c.cap=4;return c;});this._shuffleTubesOnce(fb,300);
-    for(var ei3=fb.length-spec.empty;ei3<fb.length;ei3++)for(var ej3=0;ej3<4;ej3++)fb[ei3][ej3]='transparent';
+    // Fallback: randomly distribute all layers across tubes
+    var allLayers=[];
+    for(var ci=0;ci<spec.counts.length;ci++)for(var ri=0;ri<4*spec.counts[ci];ri++)allLayers.push(colors[ci]);
+    for(var si=allLayers.length-1;si>0;si--){var sj=Math.floor(Math.random()*(si+1));var tmp=allLayers[si];allLayers[si]=allLayers[sj];allLayers[sj]=tmp;}
+    var fb=[],idx=0;
+    for(var ci2=0;ci2<spec.counts.length;ci2++){var tube=[];for(var li=0;li<4;li++)tube.push(allLayers[idx++]);tube.cap=4;fb.push(tube);}
+    for(var ei3=0;ei3<spec.empty;ei3++){var et=[];for(var ej3=0;ej3<4;ej3++)et.push('transparent');et.cap=4;fb.push(et);}
     return fb;
   }
 
