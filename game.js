@@ -1,5 +1,6 @@
 // Water Sort Puzzle - WeChat Mini Game
-// Load order: particles → core class → levels → rendering → editor
+// Load order: data → particles → core class → levels → rendering → editor
+require('./js/challenge_data.js');
 require('./js/particles.js');
 require('./js/main.js');
 require('./js/levels.js');

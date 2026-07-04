@@ -184,8 +184,7 @@ class WaterSortGame {
     try {
       var saved = wx.getStorageSync('challenge_unlocked');
       if (saved && typeof saved === 'number') this._unlockedLevel = Math.max(0, Math.min(239, saved));
-    } catch(e) {}
-    this._unlockedLevel = 239; // DEBUG: unlock all
+    } catch(e) { this._unlockedLevel = 0; }
 
     this.init();
   }
@@ -2335,31 +2334,21 @@ class WaterSortGame {
   }
 
   getChallengeLevel(levelIndex) {
-    var key='L'+levelIndex;
-    if(this._challengeCache[key]) return this._challengeCache[key].map(function(t){var c=t.slice();c.cap=t.cap||t.length;return c;});
-    var spec=this._getLevelSpec(levelIndex);
-    var colors=this.colors.slice(0,spec.nColors);
-    var tubes=[];
-    for(var ci=0;ci<spec.counts.length;ci++) for(var ti=0;ti<spec.counts[ci];ti++){var tube=[];for(var li=0;li<4;li++)tube.push(colors[ci]);tube.cap=4;tubes.push(tube);}
-    for(var ei=0;ei<spec.empty;ei++){var et=[];for(var ej=0;ej<4;ej++)et.push('transparent');et.cap=4;tubes.push(et);}
-    // Randomly distribute all colored layers (guarantees proper mixing)
-    for(var retry=0;retry<5;retry++){
-      var allLayers=[];
-      for(var ci=0;ci<spec.counts.length;ci++)for(var ri=0;ri<4*spec.counts[ci];ri++)allLayers.push(colors[ci]);
-      for(var si=allLayers.length-1;si>0;si--){var sj=Math.floor(Math.random()*(si+1));var tmp=allLayers[si];allLayers[si]=allLayers[sj];allLayers[sj]=tmp;}
-      var fb=[],idx=0, totalTubes=0;
-      for(var ci2=0;ci2<spec.counts.length;ci2++) totalTubes += spec.counts[ci2];
-      for(var ti=0;ti<totalTubes;ti++){var tube=[];for(var li=0;li<4;li++)tube.push(allLayers[idx++]);tube.cap=4;fb.push(tube);}
-      for(var ei3=0;ei3<spec.empty;ei3++){var et=[];for(var ej3=0;ej3<4;ej3++)et.push('transparent');et.cap=4;fb.push(et);}
-      // Verify solvable before caching
-      if(this.isSolvable(fb,true)===true){
-        this._challengeCache[key]=fb.map(function(t){var c=t.slice();c.cap=4;return c;});
-        return fb;
+    if (levelIndex < 0 || levelIndex >= CHALLENGE_DATA.length) return [];
+    var hexStr = CHALLENGE_DATA[levelIndex];
+    var tubeHexes = hexStr.split(',');
+    var water = [];
+    for (var t = 0; t < tubeHexes.length; t++) {
+      var hex = tubeHexes[t];
+      var tube = [];
+      for (var l = 0; l < 4; l++) {
+        var ci = parseInt(hex.charAt(l), 16);
+        tube.push(ci === 15 ? 'transparent' : this.colors[ci]);
       }
+      tube.cap = 4;
+      water.push(tube);
     }
-    // Last resort
-    this._challengeCache[key]=fb.map(function(t){var c=t.slice();c.cap=4;return c;});
-    return fb;
+    return water;
   }
 
   // --- Reverse construction
