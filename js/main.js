@@ -176,10 +176,15 @@ class WaterSortGame {
       "08a3,720c,29c0,2e77,59fb,14eb,8430,41dd,f8aa,6ab9,fce6,155d,9851,62fd,c7e6,433b",
       "c6c9,ad37,c203,4131,e7bd,60f6,8f0b,0587,a4eb,e2e7,8982,6adb,f251,df95,45a3,c194"
     ];
-    this.classicDifficulty = 0;
-    this.classicPage = 0;
-    this.classicLevelNum = 0;
-    this.classicLevelIdx = 0;
+    // Challenge: 240 levels linear progression
+    this._challengeCache = {};
+    this.challengePage = 0;
+    this._totalLevels = 240;
+    this._unlockedLevel = 0;
+    try {
+      var saved = wx.getStorageSync('challenge_unlocked');
+      if (saved && typeof saved === 'number') this._unlockedLevel = Math.max(0, Math.min(239, saved));
+    } catch(e) { this._unlockedLevel = 0; }
 
     this.init();
   }
@@ -1426,7 +1431,20 @@ class WaterSortGame {
     } else if (id === 'editor') {
       this.openEditor();
     } else if (id === 'challenge_menu') {
-      this.screen = 'challenge';
+      this.challengePage = 0; this.screen = 'challenge';
+    } else if (id.indexOf('ch_play_') === 0) {
+      var lvlIdx = parseInt(id.split('_')[2]);
+      var w = this.getChallengeLevel(lvlIdx);
+      this.water = w;
+      this.originalWater = w.map(function(t) { var c = t.slice(); c.cap = t.cap || t.length; return c; });
+      this.moves = 0; this.won = false; this.clicked = []; this.transferring = false; this.transferAnim = null;
+      this.currentLevel = lvlIdx; this.screen = 'game';
+    } else if (id === 'ch_prev') {
+      this.challengePage = Math.max(0, this.challengePage - 1);
+    } else if (id === 'ch_next') {
+      this.challengePage++;
+    } else if (id === 'back_challenge') {
+      this.screen = 'menu';
     } else if (id === 'special_menu') {
       this.screen = 'speciallevels';
     } else if (id === 'back_challenge') {
@@ -2292,7 +2310,61 @@ class WaterSortGame {
     return best;
   }
 
-  // --- Reverse construction: generate guaranteed-solvable levels ---
+
+
+  // === 240-level challenge system ===
+  _getLevelSpec(idx) {
+    if(idx<30) return {nColors:5,counts:[1,1,1,1,1],empty:2};
+    if(idx<60) return {nColors:6,counts:[1,1,1,1,1,1],empty:2};
+    if(idx<90) return {nColors:7,counts:[1,1,1,1,1,1,1],empty:2};
+    if(idx<120){var c=[2,2,2,1,1,1,1];return{nColors:7,counts:this._shuffleArr(c,idx),empty:2};}
+    if(idx<150) return {nColors:8,counts:[1,1,1,1,1,1,1,1],empty:2};
+    if(idx<180){var c2=[2,2,2,2,1,1,1,1];return{nColors:8,counts:this._shuffleArr(c2,idx+100),empty:2};}
+    if(idx<210){var c3=[2,2,2,2,2,2,1,1];return{nColors:8,counts:this._shuffleArr(c3,idx+200),empty:2};}
+    var c4=[3,3,3,3,2,2,2,2];return{nColors:8,counts:this._shuffleArr(c4,idx+300),empty:2};
+  }
+
+  _shuffleArr(arr,seed){var a=arr.slice();for(var i=a.length-1;i>0;i--){var s=Math.sin(seed*(i+1)*127.1+311.7)*43758.5453;var j=Math.floor((s-Math.floor(s))*(i+1));var tmp=a[i];a[i]=a[j];a[j]=tmp;}return a;}
+
+  _shuffleTubesOnce(tubes,steps){
+    var gt=function(w){for(var i=w.length-1;i>=0;i--)if(w[i]!=='transparent')return{color:w[i],idx:i};return null;};
+    for(var k=0;k<steps;k++){
+      var from=Math.floor(Math.random()*tubes.length),to=Math.floor(Math.random()*tubes.length);
+      if(from===to)continue;var src=tubes[from],dst=tubes[to],sc=gt(src);if(!sc)continue;
+      var dc=gt(dst);if(dc&&dc.color!==sc.color)continue;
+      var run=1;for(var ri=sc.idx-1;ri>=0&&src[ri]===sc.color;ri--)run++;
+      var sp=0;for(var si=0;si<dst.length;si++)if(dst[si]==='transparent')sp++;
+      var cnt=Math.min(run,sp);if(cnt<=0)continue;
+      var rm=0;for(var ri2=src.length-1;ri2>=0&&rm<cnt;ri2--)if(src[ri2]===sc.color){src[ri2]='transparent';rm++;}
+      var ad=0;for(var ai=0;ai<dst.length&&ad<cnt;ai++)if(dst[ai]==='transparent'){dst[ai]=sc.color;ad++;}
+    }
+  }
+
+  getChallengeLevel(levelIndex) {
+    var key='L'+levelIndex;
+    if(this._challengeCache[key]) return this._challengeCache[key].map(function(t){var c=t.slice();c.cap=t.cap||t.length;return c;});
+    var spec=this._getLevelSpec(levelIndex);
+    var colors=this.colors.slice(0,spec.nColors);
+    var tubes=[];
+    for(var ci=0;ci<spec.counts.length;ci++) for(var ti=0;ti<spec.counts[ci];ti++){var tube=[];for(var li=0;li<4;li++)tube.push(colors[ci]);tube.cap=4;tubes.push(tube);}
+    for(var ei=0;ei<spec.empty;ei++){var et=[];for(var ej=0;ej<4;ej++)et.push('transparent');et.cap=4;tubes.push(et);}
+    for(var retry=0;retry<30;retry++){
+      var ss=40+levelIndex*3+retry*25;
+      var copy=tubes.map(function(t){var c=t.slice();c.cap=4;return c;});
+      this._shuffleTubesOnce(copy,ss);
+      var ap=true;for(var ti2=0;ti2<copy.length&&ap;ti2++)for(var lj=1;lj<copy[ti2].cap;lj++)if(copy[ti2][lj]!==copy[ti2][0]){ap=false;break;}
+      if(ap)continue;
+      if(this.isSolvable(copy)!==true)continue;
+      for(var ei2=copy.length-spec.empty;ei2<copy.length;ei2++)for(var ej2=0;ej2<4;ej2++)copy[ei2][ej2]='transparent';
+      this._challengeCache[key]=copy.map(function(t){var c=t.slice();c.cap=4;return c;});
+      return copy;
+    }
+    var fb=tubes.map(function(t){var c=t.slice();c.cap=4;return c;});this._shuffleTubesOnce(fb,300);
+    for(var ei3=fb.length-spec.empty;ei3<fb.length;ei3++)for(var ej3=0;ej3<4;ej3++)fb[ei3][ej3]='transparent';
+    return fb;
+  }
+
+  // --- Reverse construction
   generateByReverse(colors, cap, emptyTubes, shuffleSteps) {
     cap = cap || 4;
     emptyTubes = emptyTubes || 2;
@@ -3423,6 +3495,11 @@ class WaterSortGame {
       }
     }
     this.won = true;
+    // Save challenge progress
+    if (this.currentLevel >= 0 && this._unlockedLevel <= this.currentLevel) {
+      this._unlockedLevel = Math.min(239, this.currentLevel + 1);
+      try { wx.setStorageSync('challenge_unlocked', this._unlockedLevel); } catch(e) {}
+    }
   }
 
   // --- Helpers ---
