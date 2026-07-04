@@ -72,6 +72,7 @@ class WaterSortGame {
     this._hintMsg = null;       // null | 'thinking' | 'timeout' | 'unsolvable'
     this._lastHintFrom = -1;    // track last hint to prevent pingpong
     this._lastHintTo = -1;
+    this._solStep = 0;          // progress in pre-computed solution
 
     // Editor state
     this.editorTubes = [];
@@ -2191,18 +2192,23 @@ class WaterSortGame {
     if (this.currentLevel >= 0 && this.currentLevel < 240 && GameGlobal.CHALLENGE_SOLUTIONS) {
       var solStr = GameGlobal.CHALLENGE_SOLUTIONS[this.currentLevel];
       if (solStr) {
+        if (typeof this._solStep !== 'number') this._solStep = 0;
         var parts = solStr.split(',');
-        for (var pi = 0; pi < parts.length; pi += 2) {
+        // Try from current position forward
+        for (var pi = this._solStep; pi < parts.length; pi += 2) {
           var pf = parseInt(parts[pi]), pt = parseInt(parts[pi+1]);
-          if (pf === this._lastHintTo && pt === this._lastHintFrom) continue; // skip reverse
-          // Check if this move is valid for current state
+          if (pf === this._lastHintTo && pt === this._lastHintFrom) continue;
           var topCheck = this.getTopLayer(this.water[pf]);
           if (!topCheck) continue;
           var tgtCheck = this.getTopLayer(this.water[pt]);
           if (tgtCheck && tgtCheck.color !== topCheck.color) continue;
           if (!this.hasSpace(this.water[pt])) continue;
+          this._solStep = pi + 2; // advance past the returned step
           return { from: pf, to: pt };
         }
+        // If we got here, the pre-computed solution no longer matches current state
+        // Reset and fall through to DFS
+        this._solStep = 0;
       }
     }
     // Fallback to online DFS solver
