@@ -2192,7 +2192,7 @@ class WaterSortGame {
   startHint(callback) { var self = this; setTimeout(function() { callback(self._findHintSync()); }, 30); }
 
   _findHintSync() {
-    var timeoutMs = 8000, startTime = Date.now(), maxDepth = Math.max(2000, this.water.length * 200);
+    var timeoutMs = 4000, startTime = Date.now(), maxDepth = Math.max(800, this.water.length * 80);
     var banFrom = this._lastHintTo, banTo = this._lastHintFrom;
 
     var tubes = [];
@@ -2217,19 +2217,12 @@ class WaterSortGame {
       return rest.sort().concat(pure.sort()).concat(empty.sort()).join('|');
     }
 
-    var visited = {}, result = null, bestMove = null, bestDepth = Infinity;
-    function dfs(state, depth, firstMove, parentMove) {
-      if (result === 'timeout') return false;
-      if (depth >= bestDepth) return false; // 已有更优解，剪枝
-      if (depth > maxDepth || (depth % 500 === 0 && Date.now() - startTime > timeoutMs)) {
-        if (!bestMove) result = 'timeout';
-        return false;
+    var visited = {}, result = null;
+    function dfs(state, depth, firstMove) {
+      if (depth > maxDepth || (depth % 200 === 0 && Date.now() - startTime > timeoutMs)) {
+        result = 'timeout'; return false;
       }
-      if (state.every(_pur)) {
-        bestMove = firstMove;
-        bestDepth = depth;
-        return true;
-      }
+      if (state.every(_pur)) { result = firstMove; return true; }
       var k = key(state); if (visited[k]) return false; visited[k] = true;
 
       var moves = [], firstEmpty = -1;
@@ -2240,16 +2233,12 @@ class WaterSortGame {
         var srcRun = _topR(state[from]);
         for (var to = 0; to < state.length; to++) {
           if (from === to) continue;
-          // 禁止立即反向：所有层级生效
-          if (parentMove && from === parentMove.to && to === parentMove.from) continue;
-          // 禁止循环：跨调用反向禁止只在根节点生效
           if (!firstMove && from === banFrom && to === banTo) continue;
           var dTop = _topC(state[to]);
           if (dTop !== 'transparent' && dTop !== sc) continue;
           var sp = _sp(state[to]); if (sp === 0) continue;
           if (dTop === 'transparent' && to !== firstEmpty) continue;
           var cnt = Math.min(srcRun, sp);
-          // 反乒乓剪枝：同色互倒只在完成目标或清空来源时允许
           if (dTop === sc) {
             var afterSrcRun = srcRun - cnt;
             var testTo = state[to].slice(); var ta = 0;
@@ -2275,17 +2264,20 @@ class WaterSortGame {
         var ad = 0;
         for (var ai = 0; ai < state[mv.to].length && ad < mv.cnt; ai++) if (state[mv.to][ai] === 'transparent') { state[mv.to][ai] = mv.sc; ad++; }
         var move = firstMove !== null ? firstMove : { from: mv.from, to: mv.to };
-        var curMove = { from: mv.from, to: mv.to };
-        dfs(state, depth + 1, move, curMove);
+        var r = dfs(state, depth + 1, move);
+        if (r === true) return move;
+        if (r && r !== 'timeout' && typeof r === 'object') { result = r; return true; }
         state[mv.from] = savedFrom; state[mv.to] = savedTo;
       }
       return false;
     }
-    try { dfs(tubes.map(function(t) { return t.slice(); }), 0, null, null); } catch(e) {}
-    if (bestMove) return bestMove;
-    if (result === 'timeout') return 'timeout';
+    try {
+      var r = dfs(tubes.map(function(t) { return t.slice(); }), 0, null);
+      if (r === 'timeout' || result === 'timeout') return 'timeout';
+      if (r && typeof r === 'object') return r;
+    } catch(e) {}
 
-    // DFS 失败时的贪心 fallback（反乒乓规则 + 禁止反向）
+    // Greedy fallback
     var best = null, bs = -1;
     for (var f = 0; f < tubes.length; f++) {
       var tf = _topC(tubes[f]); if (tf === 'transparent' || _pur(tubes[f])) continue;
