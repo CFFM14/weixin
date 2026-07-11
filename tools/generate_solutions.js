@@ -237,33 +237,81 @@ function dfsSolve(initialTubes, blockedKeys) {
   }
 
   dfs(initialTubes, 0, []);
-  return cleanPath(initialTubes, bestPath);
+  return optimizePath(initialTubes, bestPath);
 }
 
 // ============================================================
-// Clean path: remove no-op and redundant steps by simulating
+// Optimize path: remove no-ops, then greedily eliminate ping-pongs
 // ============================================================
-function cleanPath(initialTubes, path) {
+function optimizePath(initialTubes, path) {
   if (!path) return null;
-  var cur = cloneTubes(initialTubes);
-  var cleaned = [];
 
+  // Phase 1: simulate and record all intermediate states
+  var states = [cloneTubes(initialTubes)];
+  var cur = cloneTubes(initialTubes);
   for (var i = 0; i < path.length; i++) {
-    var move = path[i];
+    cur = applyMove(cur, path[i]);
+    states.push(cloneTubes(cur));
+  }
+
+  // Phase 2: greedy shortcut — for each position, try to skip ahead
+  var result = [];
+  var pos = 0;
+  while (pos < path.length) {
+    // Try to find a shortcut: jump as far ahead as possible in one move
+    var bestJump = pos + 1; // default: just take the next step
+    var bestMove = path[pos];
+
+    // Look ahead up to 10 steps to find shortcuts
+    var limit = Math.min(pos + 10, path.length);
+    for (var j = limit; j > pos; j--) {
+      // Can we reach states[j+1] from states[pos] in one move?
+      var src = states[pos];
+      var tgt = states[j]; // target after j steps (the state we want to reach)
+
+      // Try all possible moves from states[pos]
+      var moves = getScoredMoves(src);
+      for (var mi = 0; mi < moves.length; mi++) {
+        var next = applyMove(src, moves[mi]);
+        if (exactKey(next) === exactKey(states[j])) {
+          // Found a shortcut! Skip from pos to j in one move
+          bestJump = j;
+          bestMove = { from: moves[mi].from, to: moves[mi].to };
+          break;
+        }
+      }
+      if (bestJump > pos + 1) break; // found a shortcut
+    }
+
+    result.push(bestMove);
+    pos = bestJump;
+  }
+
+  // Phase 3: final simulation to remove any remaining no-ops
+  cur = cloneTubes(initialTubes);
+  var cleaned = [];
+  for (var k = 0; k < result.length; k++) {
     var before = stateKey(cur);
-    cur = applyMove(cur, move);
+    cur = applyMove(cur, result[k]);
     var after = stateKey(cur);
     if (before !== after) {
-      // This move actually changed something
-      cleaned.push({ from: move.from, to: move.to });
+      cleaned.push(result[k]);
     }
-    // If no-op, skip it
   }
   return cleaned;
 }
 
 // ============================================================
-// Get state keys along path
+// Exact state key (order-dependent, for precise comparison)
+// ============================================================
+function exactKey(tubes) {
+  return tubes.map(function(t) {
+    var cap = t.cap || t.length || 4;
+    var layers = [];
+    for (var i = 0; i < cap; i++) layers.push(t[i] || 'transparent');
+    return layers.join(',');
+  }).join('|');
+}
 // ============================================================
 function getPathStates(initialTubes, path) {
   var states = [stateKey(initialTubes)];
