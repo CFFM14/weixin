@@ -241,7 +241,7 @@ function dfsSolve(initialTubes, blockedKeys) {
 }
 
 // ============================================================
-// Optimize path: remove no-ops, then greedily eliminate ping-pongs
+// Optimize path: remove no-op cycles, greedily find shortcuts
 // ============================================================
 function optimizePath(initialTubes, path) {
   if (!path) return null;
@@ -254,36 +254,46 @@ function optimizePath(initialTubes, path) {
     states.push(cloneTubes(cur));
   }
 
-  // Phase 2: greedy shortcut — for each position, try to skip ahead
+  // Phase 2: greedy shortcut
   var result = [];
   var pos = 0;
   while (pos < path.length) {
-    // Try to find a shortcut: jump as far ahead as possible in one move
-    var bestJump = pos + 1; // default: just take the next step
+    var bestJump = pos + 1;
     var bestMove = path[pos];
 
-    // Look ahead up to 10 steps to find shortcuts
-    var limit = Math.min(pos + 10, path.length);
-    for (var j = limit; j > pos; j--) {
-      // Can we reach states[j+1] from states[pos] in one move?
-      var src = states[pos];
-      var tgt = states[j]; // target after j steps (the state we want to reach)
+    var limit = Math.min(pos + 12, path.length);
 
-      // Try all possible moves from states[pos]
-      var moves = getScoredMoves(src);
-      for (var mi = 0; mi < moves.length; mi++) {
-        var next = applyMove(src, moves[mi]);
-        if (exactKey(next) === exactKey(states[j])) {
-          // Found a shortcut! Skip from pos to j in one move
-          bestJump = j;
-          bestMove = { from: moves[mi].from, to: moves[mi].to };
-          break;
-        }
+    // First: check for 0-step skip (state[pos] === state[j] for some j > pos)
+    // This catches A→B→A ping-pong cycles and other no-op sequences
+    for (var j = limit; j > pos + 1; j--) {
+      if (exactKey(states[pos]) === exactKey(states[j])) {
+        // States are identical — we can skip from pos to j with zero moves!
+        bestJump = j;
+        bestMove = null; // no move needed
+        break;
       }
-      if (bestJump > pos + 1) break; // found a shortcut
     }
 
-    result.push(bestMove);
+    // If no 0-step skip found, try 1-step shortcut
+    if (bestMove !== null) {
+      for (var j = limit; j > pos + 1; j--) {
+        if (j <= bestJump) break; // already found a better jump
+        var moves = getScoredMoves(states[pos]);
+        for (var mi = 0; mi < moves.length; mi++) {
+          var next = applyMove(states[pos], moves[mi]);
+          if (exactKey(next) === exactKey(states[j])) {
+            bestJump = j;
+            bestMove = { from: moves[mi].from, to: moves[mi].to };
+            break;
+          }
+        }
+        if (bestJump > pos + 1 && bestMove !== path[pos]) break;
+      }
+    }
+
+    if (bestMove !== null) {
+      result.push(bestMove);
+    }
     pos = bestJump;
   }
 
@@ -291,10 +301,9 @@ function optimizePath(initialTubes, path) {
   cur = cloneTubes(initialTubes);
   var cleaned = [];
   for (var k = 0; k < result.length; k++) {
-    var before = stateKey(cur);
+    var before = exactKey(cur);
     cur = applyMove(cur, result[k]);
-    var after = stateKey(cur);
-    if (before !== after) {
+    if (exactKey(cur) !== before) {
       cleaned.push(result[k]);
     }
   }
@@ -302,7 +311,59 @@ function optimizePath(initialTubes, path) {
 }
 
 // ============================================================
-// Exact state key (order-dependent, for precise comparison)
+// BFS solver — finds SHORTEST path (no waste). For small levels only.
+// ============================================================
+function bfsSolve(initialTubes, blockedKeys) {
+  blockedKeys = blockedKeys || {};
+  var startKey = stateKey(initialTubes);
+  if (blockedKeys.hasOwnProperty(startKey)) return null;
+
+  var visited = {};
+  visited[startKey] = null; // null parent = start
+  for (var bk in blockedKeys) {
+    if (blockedKeys.hasOwnProperty(bk)) visited[bk] = { blocked: true };
+  }
+
+  var queue = [cloneTubes(initialTubes)];
+  var keys = [startKey];
+  var head = 0;
+  var maxNodes = 2000000;
+
+  while (head < queue.length && head < maxNodes) {
+    var cur = queue[head];
+    var curKey = keys[head];
+    head++;
+
+    var moves = getScoredMoves(cur);
+    for (var mi = 0; mi < moves.length; mi++) {
+      var move = moves[mi];
+      var next = applyMove(cur, move);
+      var nk = stateKey(next);
+
+      if (visited.hasOwnProperty(nk)) continue;
+
+      visited[nk] = { parent: curKey, from: move.from, to: move.to };
+
+      if (isWin(next)) {
+        // Reconstruct path
+        var path = [];
+        var k = nk;
+        while (visited[k] && visited[k].parent) {
+          var entry = visited[k];
+          path.unshift({ from: entry.from, to: entry.to });
+          k = entry.parent;
+        }
+        return path;
+      }
+
+      queue.push(next);
+      keys.push(nk);
+    }
+  }
+
+  return null; // exhausted or timeout
+}
+
 // ============================================================
 function exactKey(tubes) {
   return tubes.map(function(t) {
@@ -364,8 +425,13 @@ function main() {
     var numTubes = tubes.length;
     var startTime = Date.now();
 
-    // Path A
-    var pathA = dfsSolve(tubes);
+    // Path A: use BFS for small levels (guaranteed shortest), DFS for large
+    var pathA;
+    if (numTubes <= 10) {
+      pathA = bfsSolve(tubes);
+    } else {
+      pathA = dfsSolve(tubes);
+    }
     if (!pathA) {
       console.log('L' + (i + 1) + ': ✗ NO SOLUTION (' + numTubes + ' tubes)');
       allSolutions.push([]);
@@ -373,14 +439,19 @@ function main() {
       continue;
     }
 
-    // Path B: block Path A's intermediate states
+    // Path B: block Path A's intermediate states, use same solver method
     var statesA = getPathStates(tubes, pathA);
     var blockedA = {};
     for (var si = 1; si < statesA.length - 1; si++) {
       blockedA[statesA[si]] = true;
     }
 
-    var pathB = dfsSolve(tubes, blockedA);
+    var pathB;
+    if (numTubes <= 10) {
+      pathB = bfsSolve(tubes, blockedA);
+    } else {
+      pathB = dfsSolve(tubes, blockedA);
+    }
     var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
     totalTime += Date.now() - startTime;
 
