@@ -244,20 +244,21 @@ WaterSortGame.prototype.renderGame = function() {
   this.drawSmallBtn(undoX, btnY2, undoW, btnH2, '撤销', '#ffdd88');
   this.buttonBounds.push({ id: 'undo', x: undoX, y: btnY2, w: undoW, h: btnH2 });
 
-  // Hint
+  // Hint — only visible when active
   var hintX = undoX + undoW + gap;
   var hintW = 52 * s;
-  // Hint button with dynamic label
-  var hintLabel = '💡 提示';
-  if (this._hintThinking) hintLabel = '💭 …';
-  else if (this._hintMsg === 'timeout') hintLabel = '⏱ 超时';
-  else if (this._hintMsg === 'unsolvable') hintLabel = '❓ 无解';
-  var hintBg = this._hintThinking ? '#ffe8cc' : '#fff8cc';
-  this.drawSmallBtn(hintX, btnY2, hintW, btnH2, hintLabel, hintBg);
-  this.buttonBounds.push({ id: 'hint', x: hintX, y: btnY2, w: hintW, h: btnH2 });
+  if (this._hintActive) {
+    var hintLabel = '💡 提示';
+    if (this._hintThinking) hintLabel = '💭 …';
+    else if (this._hintMsg === 'timeout') hintLabel = '⏱ 超时';
+    else if (this._hintMsg === 'unsolvable') hintLabel = '❓ 无解';
+    var hintBg = this._hintThinking ? '#ffe8cc' : '#fff8cc';
+    this.drawSmallBtn(hintX, btnY2, hintW, btnH2, hintLabel, hintBg);
+    this.buttonBounds.push({ id: 'hint', x: hintX, y: btnY2, w: hintW, h: btnH2 });
+  }
 
-  // +Tube
-  var tubeX = hintX + hintW + gap;
+  // +Tube (position depends on whether hint is visible)
+  var tubeX = (this._hintActive ? hintX + hintW + gap : hintX);
   var tubeW = 52 * s;
   this.drawSmallBtn(tubeX, btnY2, tubeW, btnH2, '+管', '#b8d8ff');
   this.buttonBounds.push({ id: 'add_tube', x: tubeX, y: btnY2, w: tubeW, h: btnH2 });

@@ -72,7 +72,10 @@ class WaterSortGame {
     this._hintMsg = null;       // null | 'thinking' | 'timeout' | 'unsolvable'
     this._lastHintFrom = -1;    // track last hint to prevent pingpong
     this._lastHintTo = -1;
-    this._solStep = 0;          // progress in pre-computed solution
+    this._hintActive = true;    // hint available only when player hasn't modified state
+    this._hintPaths = null;     // current level's solution paths array
+    this._hintPathIndex = 0;    // which path is selected
+    this._hintStep = 0;         // progress in selected path
 
     // Editor state
     this.editorTubes = [];
@@ -719,17 +722,23 @@ class WaterSortGame {
     this.drawSmallBtn(undoX, btnY2, undoW, btnH2, '撤销', '#ffdd88');
     this.buttonBounds.push({ id: 'undo', x: undoX, y: btnY2, w: undoW, h: btnH2 });
 
-    // Hint
-    var hintX = undoX + undoW + gap;
-    var hintW = 52 * s;
-    // Hint button with dynamic label
-    var hintLabel = '💡 提示';
-    if (this._hintThinking) hintLabel = '💭 …';
-    else if (this._hintMsg === 'timeout') hintLabel = '⏱ 超时';
-    else if (this._hintMsg === 'unsolvable') hintLabel = '❓ 无解';
-    var hintBg = this._hintThinking ? '#ffe8cc' : '#fff8cc';
-    this.drawSmallBtn(hintX, btnY2, hintW, btnH2, hintLabel, hintBg);
-    this.buttonBounds.push({ id: 'hint', x: hintX, y: btnY2, w: hintW, h: btnH2 });
+    // Hint — only visible when active (player hasn't manually modified state)
+    if (this._hintActive) {
+      var hintX = undoX + undoW + gap;
+      var hintW = 52 * s;
+      var hintLabel = '💡 提示';
+      var hintBg = '#fff8cc';
+      if (this._hintThinking) {
+        hintLabel = '💭 …';
+        hintBg = '#ffe8cc';
+      } else if (this._hintMsg === 'timeout') {
+        hintLabel = '⏱ 超时';
+      } else if (this._hintMsg === 'unsolvable') {
+        hintLabel = '❓ 无解';
+      }
+      this.drawSmallBtn(hintX, btnY2, hintW, btnH2, hintLabel, hintBg);
+      this.buttonBounds.push({ id: 'hint', x: hintX, y: btnY2, w: hintW, h: btnH2 });
+    }
 
     // +Tube (hidden in hardcore mode)
     if (this.currentLevel !== -5) {
@@ -1436,6 +1445,17 @@ class WaterSortGame {
       this.originalWater = w.map(function(t) { var c = t.slice(); c.cap = t.cap || t.length; return c; });
       this.moves = 0; this.won = false; this.clicked = []; this.transferring = false; this.transferAnim = null;
       this.currentLevel = lvlIdx; this.screen = 'game';
+      // Init hint system for challenge levels
+      var hintPaths = GameGlobal.CHALLENGE_SOLUTIONS && GameGlobal.CHALLENGE_SOLUTIONS[lvlIdx];
+      if (hintPaths && hintPaths.length > 0) {
+        this._hintPaths = hintPaths;
+        this._hintPathIndex = Math.floor(Math.random() * hintPaths.length);
+        this._hintStep = 0;
+        this._hintActive = true;
+      } else {
+        this._hintPaths = null;
+        this._hintActive = false;
+      }
     } else if (id === 'ch_prev') {
       this.challengePage = Math.max(0, this.challengePage - 1);
     } else if (id === 'ch_next') {
@@ -2188,139 +2208,28 @@ class WaterSortGame {
   startHint(callback) { var self = this; setTimeout(function() { callback(self._findHintSync()); }, 30); }
 
   _findHintSync() {
-    // First, try pre-computed solution for challenge levels
-    if (this.currentLevel >= 0 && this.currentLevel < 240 && GameGlobal.CHALLENGE_SOLUTIONS) {
-      var solStr = GameGlobal.CHALLENGE_SOLUTIONS[this.currentLevel];
-      if (solStr) {
-        if (typeof this._solStep !== 'number') this._solStep = 0;
-        var parts = solStr.split(',');
-        // Try from current position forward
-        for (var pi = this._solStep; pi < parts.length; pi += 2) {
-          var pf = parseInt(parts[pi]), pt = parseInt(parts[pi+1]);
-          if (pf === this._lastHintTo && pt === this._lastHintFrom) continue;
-          var topCheck = this.getTopLayer(this.water[pf]);
-          if (!topCheck) continue;
-          var tgtCheck = this.getTopLayer(this.water[pt]);
-          if (tgtCheck && tgtCheck.color !== topCheck.color) continue;
-          if (!this.hasSpace(this.water[pt])) continue;
-          this._solStep = pi + 2; // advance past the returned step
-          return { from: pf, to: pt };
-        }
-        // If we got here, the pre-computed solution no longer matches current state
-        // Reset and fall through to DFS
-        this._solStep = 0;
-      }
-    }
-    // Fallback to online DFS solver
-    var timeoutMs = 4000, startTime = Date.now(), maxDepth = Math.max(800, this.water.length * 80);
-    var banFrom = this._lastHintTo, banTo = this._lastHintFrom;
+    // Only works if hint is active and we have pre-computed paths
+    if (!this._hintActive || !this._hintPaths) return null;
+    var path = this._hintPaths[this._hintPathIndex];
+    if (!path) return null;
 
-    var tubes = [];
-    for (var t = 0; t < this.water.length; t++) {
-      var cap = this.capOf(this.water[t]), tube = [];
-      for (var l = 0; l < cap; l++) tube.push(this.water[t][l] || 'transparent');
-      tubes.push(tube);
+    if (typeof this._hintStep !== 'number') this._hintStep = 0;
+    var parts = path.split(',');
+    // Try from current position forward
+    for (var pi = this._hintStep; pi < parts.length; pi += 2) {
+      var pf = parseInt(parts[pi]), pt = parseInt(parts[pi + 1]);
+      if (pf === this._lastHintTo && pt === this._lastHintFrom) continue;
+      if (pf >= this.water.length || pt >= this.water.length) continue;
+      var topCheck = this.getTopLayer(this.water[pf]);
+      if (!topCheck) continue;
+      var tgtCheck = this.getTopLayer(this.water[pt]);
+      if (tgtCheck && tgtCheck.color !== topCheck.color) continue;
+      if (!this.hasSpace(this.water[pt])) continue;
+      this._hintStep = pi + 2; // advance past the returned step
+      return { from: pf, to: pt };
     }
-
-    var _topC = function(w) { for (var i = w.length - 1; i >= 0; i--) { var c = w[i]; if (c !== 'transparent' && c.indexOf('blind_') !== 0) return c; } return 'transparent'; };
-    var _topR = function(w) { var c = _topC(w); if (c === 'transparent') return 0; var n = 0; for (var i = w.length - 1; i >= 0 && w[i] === c; i--) n++; return n; };
-    var _sp = function(w) { var n = 0; for (var i = w.length - 1; i >= 0 && w[i] === 'transparent'; i--) n++; return n; };
-    var _pur = function(w) { var f = w[0]; for (var i = 1; i < w.length; i++) if (w[i] !== f) return false; return true; };
-    function key(state) {
-      var norm = state.map(function(t) { return t.join(','); }), empty = [], pure = [], rest = [];
-      for (var i = 0; i < norm.length; i++) {
-        var layers = norm[i].split(',');
-        if (layers.every(function(c) { return c === 'transparent'; })) empty.push(norm[i]);
-        else if (layers.every(function(c) { return c === layers[0]; })) pure.push(norm[i]);
-        else rest.push(norm[i]);
-      }
-      return rest.sort().concat(pure.sort()).concat(empty.sort()).join('|');
-    }
-
-    var visited = {}, result = null;
-    function dfs(state, depth, firstMove) {
-      if (depth > maxDepth || (depth % 200 === 0 && Date.now() - startTime > timeoutMs)) {
-        result = 'timeout'; return false;
-      }
-      if (state.every(_pur)) { result = firstMove; return true; }
-      var k = key(state); if (visited[k]) return false; visited[k] = true;
-
-      var moves = [], firstEmpty = -1;
-      for (var i = 0; i < state.length; i++) if (_topC(state[i]) === 'transparent') { firstEmpty = i; break; }
-      for (var from = 0; from < state.length; from++) {
-        if (_pur(state[from])) continue;
-        var sc = _topC(state[from]); if (sc === 'transparent') continue;
-        var srcRun = _topR(state[from]);
-        for (var to = 0; to < state.length; to++) {
-          if (from === to) continue;
-          if (!firstMove && from === banFrom && to === banTo) continue;
-          var dTop = _topC(state[to]);
-          if (dTop !== 'transparent' && dTop !== sc) continue;
-          var sp = _sp(state[to]); if (sp === 0) continue;
-          if (dTop === 'transparent' && to !== firstEmpty) continue;
-          var cnt = Math.min(srcRun, sp);
-          if (dTop === sc) {
-            var afterSrcRun = srcRun - cnt;
-            var testTo = state[to].slice(); var ta = 0;
-            for (var ti = 0; ti < testTo.length && ta < cnt; ti++) if (testTo[ti] === 'transparent') { testTo[ti] = sc; ta++; }
-            var completesTo = testTo.every(function(c) { return c === testTo[0]; });
-            if (!completesTo && afterSrcRun > 0) continue;
-          }
-          var score = cnt * 10;
-          var afterTo = state[to].slice(); var ad2 = 0;
-          for (var ai = 0; ai < afterTo.length && ad2 < cnt; ai++) if (afterTo[ai] === 'transparent') { afterTo[ai] = sc; ad2++; }
-          if (afterTo.every(function(c) { return c === afterTo[0]; })) score += 100;
-          else if (dTop !== 'transparent') score += 50;
-          moves.push({ from: from, to: to, cnt: cnt, score: score, sc: sc });
-        }
-      }
-      moves.sort(function(a, b) { return b.score - a.score; });
-      for (var mi = 0; mi < moves.length; mi++) {
-        if (result) return false;
-        var mv = moves[mi];
-        var savedFrom = state[mv.from].slice(), savedTo = state[mv.to].slice();
-        var rm = 0;
-        for (var ri = state[mv.from].length - 1; ri >= 0 && rm < mv.cnt; ri--) if (state[mv.from][ri] === mv.sc) { state[mv.from][ri] = 'transparent'; rm++; }
-        var ad = 0;
-        for (var ai = 0; ai < state[mv.to].length && ad < mv.cnt; ai++) if (state[mv.to][ai] === 'transparent') { state[mv.to][ai] = mv.sc; ad++; }
-        var move = firstMove !== null ? firstMove : { from: mv.from, to: mv.to };
-        var r = dfs(state, depth + 1, move);
-        if (r === true) return move;
-        if (r && r !== 'timeout' && typeof r === 'object') { result = r; return true; }
-        state[mv.from] = savedFrom; state[mv.to] = savedTo;
-      }
-      return false;
-    }
-    try {
-      var r = dfs(tubes.map(function(t) { return t.slice(); }), 0, null);
-      if (r === 'timeout' || result === 'timeout') return 'timeout';
-      if (r && typeof r === 'object') return r;
-    } catch(e) {}
-
-    // Greedy fallback
-    var best = null, bs = -1;
-    for (var f = 0; f < tubes.length; f++) {
-      var tf = _topC(tubes[f]); if (tf === 'transparent' || _pur(tubes[f])) continue;
-      var sr = _topR(tubes[f]);
-      for (var tgt = 0; tgt < tubes.length; tgt++) {
-        if (f === tgt || (f === banFrom && tgt === banTo)) continue;
-        var dt = _topC(tubes[tgt]);
-        if (dt !== 'transparent' && dt !== tf) continue;
-        var spVal = _sp(tubes[tgt]); if (spVal <= 0) continue;
-        var cntVal = Math.min(sr, spVal);
-        // fallback 也加反乒乓剪枝
-        if (dt === tf) {
-          var afterSrc = sr - cntVal;
-          var tTo = tubes[tgt].slice(); var ta2 = 0;
-          for (var ti2 = 0; ti2 < tTo.length && ta2 < cntVal; ti2++) if (tTo[ti2] === 'transparent') { tTo[ti2] = tf; ta2++; }
-          var comp = tTo.every(function(c) { return c === tTo[0]; });
-          if (!comp && afterSrc > 0) continue;
-        }
-        var s = cntVal * 10 + (dt === tf ? 50 : 0);
-        if (s > bs) { bs = s; best = { from: f, to: tgt }; }
-      }
-    }
-    return best;
+    // Reached end of solution path
+    return null;
   }
 
 
@@ -3382,6 +3291,7 @@ class WaterSortGame {
       this.clicked.push(idx);
       if (this.clicked[0] !== this.clicked[1]) {
         this.moves++;
+        this._hintActive = false; // player manually transferred, disable hint
         this.transfer(this.clicked[0], this.clicked[1]);
       }
       this.clicked = [];
@@ -3589,6 +3499,15 @@ class WaterSortGame {
     this.transferAnim = null;
     this.animTimer = 0;
     this.screen = 'game';
+    // Reset hint state for challenge levels
+    if (this._hintPaths && this._hintPaths.length > 0) {
+      this._hintPathIndex = Math.floor(Math.random() * this._hintPaths.length);
+      this._hintStep = 0;
+      this._hintActive = true;
+      this._hintMsg = null;
+      this._lastHintFrom = -1;
+      this._lastHintTo = -1;
+    }
   }
 
   // --- Classic Level System ---
@@ -3797,6 +3716,9 @@ class WaterSortGame {
   doHint() {
     if (this.won || this.transferAnim || this._hintThinking) return;
     if (!this.water || this.water.length === 0) return;
+    // Hint only available when player hasn't manually modified state
+    if (!this._hintActive) return;
+
     // Check if already solved
     var allPure = true;
     for (var i = 0; i < this.water.length && allPure; i++) {
@@ -3812,52 +3734,19 @@ class WaterSortGame {
     this.startHint(function(r) {
       self._hintThinking = false;
       if (r && typeof r === 'object') {
+        // Valid hint move found on pre-computed path
         self._hintMsg = null;
         self._lastHintFrom = r.from;
         self._lastHintTo = r.to;
         self.clicked = [r.from];
         setTimeout(function() {
           if (self.clicked.length === 1 && self.clicked[0] === r.from) {
-            self.moves++;
             self.transfer(r.from, r.to);
             self.clicked = [];
           }
         }, 380);
-      } else if (r === 'timeout') {
-        self._hintMsg = 'timeout';
-        setTimeout(function() { self._hintMsg = null; }, 1500);
-      } else {
-        // Last resort: find ANY valid move from actual game state
-        var anyMove = null;
-        for (var fi = 0; fi < self.water.length && !anyMove; fi++) {
-          var top = self.getTopLayer(self.water[fi]);
-          if (!top) continue;
-          for (var ti = 0; ti < self.water.length && !anyMove; ti++) {
-            if (fi === ti) continue;
-            if (self._lastHintFrom === fi && self._lastHintTo === ti) continue;
-            var tTop = self.getTopLayer(self.water[ti]);
-            if (tTop && tTop.color !== top.color) continue;
-            if (!self.hasSpace(self.water[ti])) continue;
-            anyMove = { from: fi, to: ti };
-          }
-        }
-        if (anyMove) {
-          self._lastHintFrom = anyMove.from;
-          self._lastHintTo = anyMove.to;
-          self.clicked = [anyMove.from];
-          var am = anyMove;
-          setTimeout(function() {
-            if (self.clicked.length === 1 && self.clicked[0] === am.from) {
-              self.moves++;
-              self.transfer(am.from, am.to);
-              self.clicked = [];
-            }
-          }, 380);
-        } else {
-          self._hintMsg = 'unsolvable';
-          setTimeout(function() { self._hintMsg = null; }, 1500);
-        }
       }
+      // If null returned, silently do nothing — path step not currently valid
     });
   }
 
